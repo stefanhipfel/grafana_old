@@ -137,6 +137,7 @@ var (
 	KeystoneURL string
 	KeystoneV3 bool
 	KeystoneUserDomainName string
+	KeystoneVerifySSLCert bool
 
 	// SMTP email settings
 	Smtp SmtpSettings
@@ -489,6 +490,7 @@ func NewConfigContext(args *CommandLineArgs) error {
 	KeystoneURL = keystone.Key("auth_url").String()
 	KeystoneV3 = keystone.Key("v3").MustBool(false)
 	KeystoneUserDomainName = keystone.Key("user_domain_name").String()
+  KeystoneVerifySSLCert = keystone.Key("verify_ssl_cert").MustBool(true)
 
 	// SSL
 
