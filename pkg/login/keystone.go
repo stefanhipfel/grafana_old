@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"crypto/tls"
 
+	"github.com/grafana/grafana/pkg/api/keystone"
 	"github.com/grafana/grafana/pkg/bus"
 	m "github.com/grafana/grafana/pkg/models"
-	"github.com/grafana/grafana/pkg/setting"
 )
 
 type keystoneAuther struct {
@@ -166,15 +165,7 @@ func (a *keystoneAuther) authenticateV3(username, password string) error {
 	}
 	request.Header.Add("Content-Type", "application/json")
 
-	tr := &http.Transport{
-		//	TLSClientConfig:    &tls.Config{RootCAs: pool}, // TODO
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: !setting.KeystoneVerifySSLCert},
-	}
-	tr.Proxy = http.ProxyFromEnvironment
-
-	client := &http.Client{Transport: tr}
-
-	resp, err := client.Do(request)
+	resp, err := keystone.GetHttpClient().Do(request)
 	if err != nil {
 		return err
 	} else if resp.StatusCode != 201 {
@@ -353,16 +344,7 @@ func (a *keystoneAuther) getProjectListV3() error {
 	}
 	request.Header.Add("X-Auth-Token", a.token)
 
-	tr := &http.Transport{
-		//	TLSClientConfig:    &tls.Config{RootCAs: pool}, // TODO
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: !setting.KeystoneVerifySSLCert},
-	}
-
-	tr.Proxy = http.ProxyFromEnvironment
-
-	client := &http.Client{Transport: tr}
-
-	resp, err := client.Do(request)
+	resp, err := keystone.GetHttpClient().Do(request)
 	if err != nil {
 		return err
 	} else if resp.StatusCode != 200 {
