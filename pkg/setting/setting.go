@@ -133,10 +133,12 @@ var (
 	LdapConfigFile string
 
 	// Keystone
-	KeystoneEnabled bool
-	KeystoneURL string
-	KeystoneV3 bool
+	KeystoneEnabled        bool
+	KeystoneURL            string
+	KeystoneV3             bool
 	KeystoneUserDomainName string
+	KeystoneVerifySSLCert  bool
+	KeystoneRootCAPEMFile  string
 
 	// SMTP email settings
 	Smtp SmtpSettings
@@ -489,7 +491,8 @@ func NewConfigContext(args *CommandLineArgs) error {
 	KeystoneURL = keystone.Key("auth_url").String()
 	KeystoneV3 = keystone.Key("v3").MustBool(false)
 	KeystoneUserDomainName = keystone.Key("user_domain_name").String()
-
+	KeystoneVerifySSLCert = keystone.Key("verify_ssl_cert").MustBool(true)
+	KeystoneRootCAPEMFile = keystone.Key("root_ca_pem_file").String()
 	// SSL
 
 	readSessionConfig()
