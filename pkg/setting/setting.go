@@ -133,12 +133,17 @@ var (
 	LdapConfigFile string
 
 	// Keystone
-	KeystoneEnabled        bool
-	KeystoneURL            string
-	KeystoneV3             bool
-	KeystoneUserDomainName string
-	KeystoneVerifySSLCert  bool
-	KeystoneRootCAPEMFile  string
+	KeystoneEnabled             bool
+	KeystoneURL                 string
+	KeystoneV3                  bool
+	KeystoneUserDomainName      string
+	KeystoneVerifySSLCert       bool
+	KeystoneRootCAPEMFile       string
+	KeystoneDefaultRole         string
+	KeystoneViewerRoles         []string
+	KeystoneEditorReadonlyRoles []string
+	KeystoneEditorRoles         []string
+	KeystoneAdminRoles          []string
 
 	// SMTP email settings
 	Smtp SmtpSettings
@@ -493,6 +498,11 @@ func NewConfigContext(args *CommandLineArgs) error {
 	KeystoneUserDomainName = keystone.Key("user_domain_name").String()
 	KeystoneVerifySSLCert = keystone.Key("verify_ssl_cert").MustBool(true)
 	KeystoneRootCAPEMFile = keystone.Key("root_ca_pem_file").String()
+	KeystoneDefaultRole = keystone.Key("default_role").String()
+	KeystoneViewerRoles = strings.Split(keystone.Key("viewer_roles").String(), ",")
+	KeystoneEditorReadonlyRoles = strings.Split(keystone.Key("editor_readonly_roles").String(), ",")
+	KeystoneEditorRoles = strings.Split(keystone.Key("editor_roles").String(), ",")
+	KeystoneAdminRoles = strings.Split(keystone.Key("admin_roles").String(), ",")
 	// SSL
 
 	readSessionConfig()

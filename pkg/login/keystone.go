@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/grafana/grafana/pkg/api/keystone"
 	"github.com/grafana/grafana/pkg/bus"
+	"github.com/grafana/grafana/pkg/log"
 	m "github.com/grafana/grafana/pkg/models"
+	"github.com/grafana/grafana/pkg/setting"
 )
 
 type keystoneAuther struct {
@@ -17,6 +20,50 @@ type keystoneAuther struct {
 	userdomainname string
 	token          string
 	tenants        []tenant_struct
+	v3token        V3Token
+}
+
+type V3Token struct {
+	Token struct {
+		Methods []string `json:"methods"`
+		Roles   []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"roles"`
+		ExpiresAt time.Time `json:"expires_at"`
+		Project   struct {
+			Domain struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"domain"`
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"project"`
+		Catalog []struct {
+			Endpoints []struct {
+				RegionID  string `json:"region_id"`
+				URL       string `json:"url"`
+				Region    string `json:"region"`
+				Interface string `json:"interface"`
+				ID        string `json:"id"`
+			} `json:"endpoints"`
+			Type string `json:"type"`
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"catalog"`
+		Extras struct {
+		} `json:"extras"`
+		User struct {
+			Domain struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"domain"`
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"user"`
+		AuditIds []string  `json:"audit_ids"`
+		IssuedAt time.Time `json:"issued_at"`
+	} `json:"token"`
 }
 
 type v2_auth_response_struct struct {
@@ -175,6 +222,11 @@ func (a *keystoneAuther) authenticateV3(username, password string) error {
 	// in keystone v3 the token is in the response header
 	a.token = resp.Header.Get("X-Subject-Token")
 
+	// parse the token body - we'll be using the roles later
+	err = json.NewDecoder(resp.Body).Decode(&a.v3token)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -256,7 +308,7 @@ func (a *keystoneAuther) syncOrgRoles(user *m.User) error {
 			}
 		}
 
-		// remove role if no mappings match
+		// remove role if no tenant mappings match
 		if !match {
 			cmd := m.RemoveOrgUserCommand{OrgId: org.OrgId, UserId: user.Id}
 			if err := bus.Dispatch(&cmd); err != nil {
@@ -270,17 +322,36 @@ func (a *keystoneAuther) syncOrgRoles(user *m.User) error {
 
 	// add missing org roles
 	for _, tenant := range a.tenants {
+
 		if grafanaOrg, err := a.getGrafanaOrgFor(tenant.Name); err != nil {
 			return err
 		} else {
-			if _, exists := handledOrgIds[grafanaOrg.Id]; exists {
-				continue
+			var exists bool
+			if _, exists = handledOrgIds[grafanaOrg.Id]; exists {
+				if !a.keystoneRoleMappingsConfigured() {
+					continue
+				}
+			}
+			// add role
+			roleName := "Editor"
+
+			keystoneRole := a.roleMappedFromKeystone()
+			log.Info("Mapped role: %v", keystoneRole)
+			// If we get a configured role, use it - otherwise leave it as Editor
+			if keystoneRole != "" {
+				roleName = keystoneRole
 			}
 
-			// add role
-			cmd := m.AddOrgUserCommand{UserId: user.Id, Role: "Editor", OrgId: grafanaOrg.Id}
-			if err := bus.Dispatch(&cmd); err != nil {
-				return err
+			if exists {
+				cmd := m.UpdateOrgUserCommand{UserId: user.Id, Role: m.RoleType(roleName), OrgId: grafanaOrg.Id}
+				if err := bus.Dispatch(&cmd); err != nil {
+					return err
+				}
+			} else {
+				cmd := m.AddOrgUserCommand{UserId: user.Id, Role: m.RoleType(roleName), OrgId: grafanaOrg.Id}
+				if err := bus.Dispatch(&cmd); err != nil {
+					return err
+				}
 			}
 
 			// set org if none is set (for new users)
@@ -297,6 +368,51 @@ func (a *keystoneAuther) syncOrgRoles(user *m.User) error {
 	}
 
 	return nil
+}
+
+func (a *keystoneAuther) keystoneRoleMappingsConfigured() bool {
+	return len(setting.KeystoneViewerRoles) != 0 ||
+		len(setting.KeystoneEditorReadonlyRoles) != 0 ||
+		len(setting.KeystoneEditorRoles) != 0 ||
+		len(setting.KeystoneAdminRoles) != 0 ||
+		setting.KeystoneDefaultRole != ""
+}
+
+func (a *keystoneAuther) roleMappedFromKeystone() string {
+	var keystoneRoles []string
+
+	for _, tokenRole := range a.v3token.Token.Roles {
+		keystoneRoles = append(keystoneRoles, tokenRole.Name)
+	}
+
+	log.Info("Roles from token: %v", keystoneRoles)
+
+	// Check most privileged roles first
+	if contains(setting.KeystoneAdminRoles, keystoneRoles) {
+		return "Admin"
+	}
+	if contains(setting.KeystoneEditorRoles, keystoneRoles) {
+		return "Editor"
+	}
+	if contains(setting.KeystoneEditorReadonlyRoles, keystoneRoles) {
+		return "EditorReadonly"
+	}
+	if contains(setting.KeystoneViewerRoles, keystoneRoles) {
+		return "Viewer"
+	}
+	// If nothing matches, return the default role
+	return setting.KeystoneDefaultRole
+}
+
+func contains(configuredRoles, keystoneRoles []string) bool {
+	for _, keystoneRole := range keystoneRoles {
+		for _, configuredRole := range configuredRoles {
+			if keystoneRole == configuredRole {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (a *keystoneAuther) getTenantList() error {
