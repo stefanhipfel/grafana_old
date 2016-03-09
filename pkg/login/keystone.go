@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/grafana/grafana/pkg/api/keystone"
 	"github.com/grafana/grafana/pkg/bus"
+	"github.com/grafana/grafana/pkg/keystone"
 	"github.com/grafana/grafana/pkg/log"
 	m "github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/setting"
@@ -17,72 +17,9 @@ type keystoneAuther struct {
 	v3             bool
 	userdomainname string
 	token          string
-	tenants        []tenant_struct
-	v3token        v3_auth_response_struct
+	tenants        []keystone.V2_tenant_struct
+	v3token        keystone.V3_auth_response_struct
 	userId         string
-}
-
-type v2_auth_post_struct struct {
-	Auth v2_auth_struct `json:"auth"`
-}
-
-type v2_auth_struct struct {
-	PasswordCredentials v2_credentials_struct `json:"passwordCredentials"`
-}
-
-type v2_credentials_struct struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type v2_tenant_response_struct struct {
-	Tenants []tenant_struct
-}
-
-type tenant_struct struct {
-	Name string
-	ID   string
-}
-
-type v3_auth_post_struct struct {
-	Auth v3_auth_struct `json:"auth"`
-}
-
-type v3_auth_struct struct {
-	Identity v3_identity_struct `json:"identity"`
-	Scope    v3_scope_struct    `json:"scope"`
-}
-
-type v3_identity_struct struct {
-	Methods  []string                 `json:"methods"`
-	Password v3_passwordmethod_struct `json:"password"`
-	Token    *v3_id_struct            `json:"token,omitempty"`
-}
-
-type v3_scope_struct struct {
-	Project *v3_id_struct `json:"project,omitempty"`
-}
-
-type v3_passwordmethod_struct struct {
-	User v3_user_struct `json:"user"`
-}
-
-type v3_id_struct struct {
-	ID string `json:"id,omitempty"`
-}
-
-type v3_user_struct struct {
-	Name     string               `json:"name"`
-	Password string               `json:"password"`
-	Domain   v3_userdomain_struct `json:"domain"`
-}
-
-type v3_userdomain_struct struct {
-	Name string `json:"name"`
-}
-
-type v3_project_response_struct struct {
-	Projects []tenant_struct
 }
 
 func NewKeystoneAuthenticator(server string, v3 bool, userdomainaname string) *keystoneAuther {
@@ -123,7 +60,7 @@ func (a *keystoneAuther) authenticate(username, password string) error {
 }
 
 func (a *keystoneAuther) authenticateV2(username, password string) error {
-	var auth_post v2_auth_post_struct
+	var auth_post keystone.V2_auth_post_struct
 	auth_post.Auth.PasswordCredentials.Username = username
 	auth_post.Auth.PasswordCredentials.Password = password
 	b, _ := json.Marshal(auth_post)
@@ -142,7 +79,7 @@ func (a *keystoneAuther) authenticateV2(username, password string) error {
 	}
 
 	decoder := json.NewDecoder(resp.Body)
-	var auth_response v2_auth_response_struct
+	var auth_response keystone.V2_auth_response_struct
 	err = decoder.Decode(&auth_response)
 	if err != nil {
 		return err
@@ -155,7 +92,7 @@ func (a *keystoneAuther) authenticateV2(username, password string) error {
 }
 
 func (a *keystoneAuther) authenticateV3(username, password string) error {
-	var auth_post v3_auth_post_struct
+	var auth_post keystone.V3_auth_post_struct
 	auth_post.Auth.Identity.Methods = []string{"password"}
 	auth_post.Auth.Identity.Password.User.Name = username
 	auth_post.Auth.Identity.Password.User.Password = password
@@ -242,6 +179,7 @@ func (a *keystoneAuther) createGrafanaOrg(orgname string) (*m.Org, error) {
 
 func (a *keystoneAuther) syncOrgRoles(user *m.User) error {
 	err := a.getTenantList()
+
 	if err != nil {
 		return err
 	}
@@ -298,7 +236,6 @@ func (a *keystoneAuther) syncOrgRoles(user *m.User) error {
 				return err
 			}
 
-			log.Info("Mapped role: %v", keystoneRole)
 			// If we get a configured role, use it - otherwise leave it as Editor
 			if keystoneRole != "" {
 				roleName = keystoneRole
@@ -340,7 +277,7 @@ func (a *keystoneAuther) keystoneRoleMappingsConfigured() bool {
 		setting.KeystoneDefaultRole != ""
 }
 
-func (a *keystoneAuther) roleMappedFromKeystone(tenant tenant_struct) (string, error) {
+func (a *keystoneAuther) roleMappedFromKeystone(tenant keystone.V2_tenant_struct) (string, error) {
 	keystoneRoles, err := a.getTenantRoles(a.userId, tenant)
 	if err != nil {
 		return "", err
@@ -374,23 +311,22 @@ func contains(configuredRoles, keystoneRoles []string) bool {
 	return false
 }
 
-func (a *keystoneAuther) getTenantRoles(userId string, tenant tenant_struct) ([]string, error) {
+func (a *keystoneAuther) getTenantRoles(userId string, tenant keystone.V2_tenant_struct) ([]string, error) {
 	if a.v3 {
 		return a.getProjectRolesV3(userId, tenant)
 	} else {
-		// TODO: return a.getTenantRolesV2(userId, tenant)
-		return []string{}, errors.New("a.getTenantRolesV2(userId, tenant) not implemented")
+		return a.getTenantRolesV2(userId, tenant)
 	}
 }
 
 /*
 Get project roles by re-authenticating with project scope, using existing domain-scoped token
 */
-func (a *keystoneAuther) getProjectRolesV3(userId string, tenant tenant_struct) ([]string, error) {
-	var auth_post v3_auth_post_struct
+func (a *keystoneAuther) getProjectRolesV3(userId string, tenant keystone.V2_tenant_struct) ([]string, error) {
+	var auth_post keystone.V3_auth_post_struct
 	auth_post.Auth.Identity.Methods = []string{"token"}
-	auth_post.Auth.Identity.Token = &v3_id_struct{ID: a.token}
-	auth_post.Auth.Scope.Project = &v3_id_struct{ID: tenant.ID}
+	auth_post.Auth.Identity.Token = &keystone.V3_token_struct{ID: a.token}
+	auth_post.Auth.Scope.Project = &keystone.V3_project_struct{ID: tenant.ID}
 	b, _ := json.Marshal(auth_post)
 
 	request, err := http.NewRequest("POST", a.server+"/v3/auth/tokens?nocatalog", bytes.NewBuffer(b))
@@ -406,7 +342,7 @@ func (a *keystoneAuther) getProjectRolesV3(userId string, tenant tenant_struct) 
 		return []string{}, errors.New("Keystone project-scoped authentication failed: " + resp.Status)
 	}
 
-	var v3token v3_auth_response_struct
+	var v3token keystone.V3_auth_response_struct
 	err = json.NewDecoder(resp.Body).Decode(&v3token)
 	if err != nil {
 		return []string{}, err
@@ -417,7 +353,45 @@ func (a *keystoneAuther) getProjectRolesV3(userId string, tenant tenant_struct) 
 		keystoneRoles = append(keystoneRoles, tokenRole.Name)
 	}
 
-	log.Info("Roles from token for project %s: %v", tenant.Name, keystoneRoles)
+	log.Info("Roles from token for project '%s': %v", tenant.Name, keystoneRoles)
+
+	return keystoneRoles, nil
+}
+
+/*
+Get tenant roles by re-authenticating with tenant scope, using existing global-scoped token
+*/
+func (a *keystoneAuther) getTenantRolesV2(userId string, tenant keystone.V2_tenant_struct) ([]string, error) {
+	var auth_post keystone.V2_auth_post_struct
+	auth_post.Auth.Token = &keystone.V2_token_struct{ID: a.token}
+	auth_post.Auth.TenantID = tenant.ID
+	b, _ := json.Marshal(auth_post)
+
+	request, err := http.NewRequest("POST", a.server+"/v2.0/tokens", bytes.NewBuffer(b))
+	if err != nil {
+		return []string{}, err
+	}
+	request.Header.Add("Content-Type", "application/json")
+
+	resp, err := keystone.GetHttpClient().Do(request)
+	if err != nil {
+		return []string{}, err
+	} else if resp.StatusCode != 200 && resp.StatusCode != 203 {
+		return []string{}, errors.New("Keystone tenant-scoped authentication failed: " + resp.Status)
+	}
+
+	var v2response keystone.V2_auth_response_struct
+	err = json.NewDecoder(resp.Body).Decode(&v2response)
+	if err != nil {
+		return []string{}, err
+	}
+	var keystoneRoles []string
+
+	for _, tokenRole := range v2response.Access.User.Roles {
+		keystoneRoles = append(keystoneRoles, tokenRole.Name)
+	}
+
+	log.Info("Roles from token for tenant '%s': %v", tenant.Name, keystoneRoles)
 
 	return keystoneRoles, nil
 }
@@ -447,7 +421,7 @@ func (a *keystoneAuther) getTenantListV2() error {
 	}
 
 	decoder := json.NewDecoder(resp.Body)
-	var tenant_response v2_tenant_response_struct
+	var tenant_response keystone.V2_tenant_response_struct
 	err = decoder.Decode(&tenant_response)
 	if err != nil {
 		return err
@@ -471,11 +445,16 @@ func (a *keystoneAuther) getProjectListV3() error {
 	}
 
 	decoder := json.NewDecoder(resp.Body)
-	var project_response v3_project_response_struct
+	var project_response keystone.V3_project_response_struct
 	err = decoder.Decode(&project_response)
 	if err != nil {
 		return err
 	}
-	a.tenants = project_response.Projects
+
+	tenants := []keystone.V2_tenant_struct{}
+	for _, project := range project_response.Projects {
+		tenants = append(tenants, keystone.V2_tenant_struct{Name: project.Name, ID: project.ID})
+	}
+	a.tenants = tenants
 	return nil
 }

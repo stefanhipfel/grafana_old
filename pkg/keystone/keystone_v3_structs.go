@@ -1,10 +1,55 @@
-package login
+package keystone
 
 import (
 	"time"
 )
 
-type v3_auth_response_struct struct {
+type V3_auth_post_struct struct {
+	Auth struct {
+		Identity struct {
+			Methods  []string `json:"methods"`
+			Password struct {
+				User struct {
+					Name     string `json:"name"`
+					Password string `json:"password"`
+					Domain   struct {
+						Name string `json:"name"`
+					} `json:"domain"`
+				} `json:"user"`
+			} `json:"password"`
+			Token *V3_token_struct `json:"token,omitempty"`
+		} `json:"identity"`
+		Scope struct {
+			Project *V3_project_struct `json:"project,omitempty"`
+		} `json:"scope"`
+	} `json:"auth"`
+}
+
+type V3_project_struct struct {
+	ID     string            `json:"id,omitempty"`
+	Name   string            `json:"name,omitempty"`
+	Domain *V3_domain_struct `json:"project,omitempty"`
+}
+
+type V3_domain_struct struct {
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
+type V3_token_struct struct {
+	ID string `json:"id,omitempty"`
+}
+
+type V3_project_response_struct struct {
+	Projects []struct {
+		Description interface{} `json:"description"`
+		Enabled     bool        `json:"enabled"`
+		ID          string      `json:"id"`
+		Name        string      `json:"name"`
+	} `json:"projects"`
+}
+
+type V3_auth_response_struct struct {
 	Token struct {
 		Methods []string `json:"methods"`
 		Roles   []struct {
@@ -47,7 +92,7 @@ type v3_auth_response_struct struct {
 	} `json:"token"`
 }
 
-type v3_role_assignment_struct struct {
+type V3_role_assignment_struct struct {
 	RoleAssignments []struct {
 		Links struct {
 			Assignment string `json:"assignment"`
@@ -77,7 +122,7 @@ type v3_role_assignment_struct struct {
 	} `json:"links"`
 }
 
-type v3_role_struct struct {
+type V3_role_struct struct {
 	Role struct {
 		ID    string `json:"id"`
 		Links struct {

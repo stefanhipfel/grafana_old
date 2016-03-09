@@ -2,89 +2,16 @@ package keystone
 
 import (
 	"bytes"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/grafana/grafana/pkg/bus"
-	"github.com/grafana/grafana/pkg/log"
+	"github.com/grafana/grafana/pkg/keystone"
 	"github.com/grafana/grafana/pkg/middleware"
 	m "github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/setting"
-
-	"io/ioutil"
 )
-
-type v2_auth_post_struct struct {
-	Auth v2_auth_struct `json:"auth"`
-}
-
-type v2_auth_struct struct {
-	PasswordCredentials v2_credentials_struct `json:"passwordCredentials"`
-	TenantName          string                `json:"tenantName"`
-}
-
-type v2_credentials_struct struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type v2_auth_response_struct struct {
-	Access v2_access_struct
-}
-
-type v2_access_struct struct {
-	Token v2_token_struct
-}
-
-type v2_token_struct struct {
-	Id        string
-	Expires   string
-	Issued_at string
-}
-
-type v3_auth_post_struct struct {
-	Auth v3_auth_struct `json:"auth"`
-}
-
-type v3_auth_struct struct {
-	Identity v3_identity_struct `json:"identity"`
-	Scope    v3_scope_struct    `json:"scope"`
-}
-
-type v3_identity_struct struct {
-	Methods  []string                 `json:"methods"`
-	Password v3_passwordmethod_struct `json:"password"`
-}
-
-type v3_passwordmethod_struct struct {
-	User v3_user_struct `json:"user"`
-}
-
-type v3_user_struct struct {
-	Name     string               `json:"name"`
-	Password string               `json:"password"`
-	Domain   v3_userdomain_struct `json:"domain"`
-}
-
-type v3_userdomain_struct struct {
-	Name string `json:"name"`
-}
-
-type v3_scope_struct struct {
-	Project v3_project_struct `json:"project"`
-}
-
-type v3_project_struct struct {
-	Name   string                  `json:"name"`
-	Domain v3_projectdomain_struct `json:"domain"`
-}
-
-type v3_projectdomain_struct struct {
-	Name string `json:"name"`
-}
 
 func getUserName(c *middleware.Context) (string, error) {
 	userQuery := m.GetUserByIdQuery{Id: c.Session.Get(middleware.SESS_KEY_USERID).(int64)}
@@ -109,7 +36,7 @@ func getOrgName(c *middleware.Context) (string, error) {
 func authenticateV2(c *middleware.Context) (string, error) {
 	server := setting.KeystoneURL
 
-	var auth_post v2_auth_post_struct
+	var auth_post keystone.V2_auth_post_struct
 	if username, err := getUserName(c); err != nil {
 		return "", err
 	} else {
@@ -137,19 +64,19 @@ func authenticateV2(c *middleware.Context) (string, error) {
 	}
 
 	decoder := json.NewDecoder(resp.Body)
-	var auth_response v2_auth_response_struct
+	var auth_response keystone.V2_auth_response_struct
 	err = decoder.Decode(&auth_response)
 	if err != nil {
 		return "", err
 	}
 
-	return auth_response.Access.Token.Id, nil
+	return auth_response.Access.Token.ID, nil
 }
 
 func authenticateV3(c *middleware.Context) (string, error) {
 	server := setting.KeystoneURL
 
-	var auth_post v3_auth_post_struct
+	var auth_post keystone.V3_auth_post_struct
 	auth_post.Auth.Identity.Methods = []string{"password"}
 	if username, err := getUserName(c); err != nil {
 		return "", err
@@ -174,7 +101,7 @@ func authenticateV3(c *middleware.Context) (string, error) {
 	}
 	request.Header.Add("Content-Type", "application/json")
 
-	resp, err := GetHttpClient().Do(request)
+	resp, err := keystone.GetHttpClient().Do(request)
 	if err != nil {
 		return "", err
 	} else if resp.StatusCode != 201 {
@@ -198,36 +125,4 @@ func GetToken(c *middleware.Context) (string, error) {
 		}
 	}
 	return token, nil
-}
-
-// From https://golang.org/pkg/net/http:
-// "Clients and Transports are safe for concurrent use by multiple goroutines and for efficiency should only be created once and re-used."
-var client *http.Client
-
-func GetHttpClient() *http.Client {
-	if client != nil {
-		return client
-	} else {
-		var certPool *x509.CertPool
-		if pemfile := setting.KeystoneRootCAPEMFile; pemfile != "" {
-			certPool = x509.NewCertPool()
-			pemFileContent, err := ioutil.ReadFile(pemfile)
-			if err != nil {
-				panic(err)
-			}
-			if !certPool.AppendCertsFromPEM(pemFileContent) {
-				log.Error(3, "Failed to load any certificates from Root CA PEM file %s", pemfile)
-			} else {
-				log.Info("Successfully loaded certificate(s) from %s", pemfile)
-			}
-		}
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{RootCAs: certPool,
-				InsecureSkipVerify: !setting.KeystoneVerifySSLCert},
-		}
-		tr.Proxy = http.ProxyFromEnvironment
-
-		client = &http.Client{Transport: tr}
-		return client
-	}
 }
