@@ -19,16 +19,18 @@ type V3_auth_post_struct struct {
 			} `json:"password"`
 			Token *V3_token_struct `json:"token,omitempty"`
 		} `json:"identity"`
-		Scope struct {
-			Project *V3_project_struct `json:"project,omitempty"`
-		} `json:"scope"`
+		Scope *V3_auth_scope_struct `json:"scope,omitempty"`
 	} `json:"auth"`
+}
+
+type V3_auth_scope_struct struct {
+	Project V3_project_struct `json:"project,omitempty"`
 }
 
 type V3_project_struct struct {
 	ID     string            `json:"id,omitempty"`
 	Name   string            `json:"name,omitempty"`
-	Domain *V3_domain_struct `json:"project,omitempty"`
+	Domain *V3_domain_struct `json:"domain,omitempty"`
 }
 
 type V3_domain_struct struct {
