@@ -239,6 +239,7 @@ func (a *keystoneAuther) syncOrgRoles(user *m.User) error {
 			// If we get a configured role, use it - otherwise leave it as Editor
 			if keystoneRole != "" {
 				roleName = keystoneRole
+				log.Info("Org '%s': use role mapped from keystone: %s", grafanaOrg.Name, roleName)
 			}
 
 			if exists {
@@ -326,7 +327,7 @@ func (a *keystoneAuther) getProjectRolesV3(userId string, tenant keystone.V2_ten
 	var auth_post keystone.V3_auth_post_struct
 	auth_post.Auth.Identity.Methods = []string{"token"}
 	auth_post.Auth.Identity.Token = &keystone.V3_token_struct{ID: a.token}
-	auth_post.Auth.Scope.Project = &keystone.V3_project_struct{ID: tenant.ID}
+	auth_post.Auth.Scope = &keystone.V3_auth_scope_struct{Project: keystone.V3_project_struct{ID: tenant.ID}}
 	b, _ := json.Marshal(auth_post)
 
 	request, err := http.NewRequest("POST", a.server+"/v3/auth/tokens?nocatalog", bytes.NewBuffer(b))

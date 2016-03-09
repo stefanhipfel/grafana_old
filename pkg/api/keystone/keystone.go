@@ -83,19 +83,20 @@ func authenticateV3(c *middleware.Context) (string, error) {
 	} else {
 		auth_post.Auth.Identity.Password.User.Name = username
 	}
+	auth_post.Auth.Scope = &keystone.V3_auth_scope_struct{}
 	if tenant, err := getOrgName(c); err != nil {
 		return "", err
 	} else {
-		auth_post.Auth.Scope.Project.Name = tenant
+		auth_post.Auth.Scope.Project = keystone.V3_project_struct{Name: tenant}
 	}
 	auth_post.Auth.Identity.Password.User.Password = c.Session.Get(middleware.SESS_KEY_PASSWORD).(string)
 	// the user domain name is currently hardcoded via a config setting - this should change to an extra domain field in the login dialog later
 	auth_post.Auth.Identity.Password.User.Domain.Name = setting.KeystoneUserDomainName
 	// set the project domain name to the user domain name, as we only deal with the projects for the domain the user logged in with
-	auth_post.Auth.Scope.Project.Domain.Name = setting.KeystoneUserDomainName
+	auth_post.Auth.Scope.Project.Domain = &keystone.V3_domain_struct{Name: setting.KeystoneUserDomainName}
 	b, _ := json.Marshal(auth_post)
 
-	request, err := http.NewRequest("POST", server+"/v3/auth/tokens", bytes.NewBuffer(b))
+	request, err := http.NewRequest("POST", server+"/v3/auth/tokens?nocatalog", bytes.NewBuffer(b))
 	if err != nil {
 		return "", err
 	}
