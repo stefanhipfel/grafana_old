@@ -89,6 +89,7 @@ func authenticateV3(c *middleware.Context) (string, error) {
 	} else {
 		auth_post.Auth.Scope.Project = keystone.V3_project_struct{Name: tenant}
 	}
+
 	auth_post.Auth.Identity.Password.User.Password = c.Session.Get(middleware.SESS_KEY_PASSWORD).(string)
 	// the user domain name is currently hardcoded via a config setting - this should change to an extra domain field in the login dialog later
 	auth_post.Auth.Identity.Password.User.Domain.Name = setting.KeystoneUserDomainName
@@ -103,6 +104,8 @@ func authenticateV3(c *middleware.Context) (string, error) {
 	request.Header.Add("Content-Type", "application/json")
 
 	resp, err := keystone.GetHttpClient().Do(request)
+	defer resp.Body.Close()
+
 	if err != nil {
 		return "", err
 	} else if resp.StatusCode != 201 {

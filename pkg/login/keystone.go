@@ -107,6 +107,8 @@ func (a *keystoneAuther) authenticateV3(username, password string) error {
 	request.Header.Add("Content-Type", "application/json")
 
 	resp, err := keystone.GetHttpClient().Do(request)
+	defer resp.Body.Close()
+
 	if err != nil {
 		return err
 	} else if resp.StatusCode != 201 {
