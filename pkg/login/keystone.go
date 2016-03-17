@@ -107,11 +107,12 @@ func (a *keystoneAuther) authenticateV3(username, password string) error {
 	request.Header.Add("Content-Type", "application/json")
 
 	resp, err := keystone.GetHttpClient().Do(request)
-	defer resp.Body.Close()
-
 	if err != nil {
 		return err
-	} else if resp.StatusCode != 201 {
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 201 {
 		return errors.New("Keystone authentication failed: " + resp.Status)
 	}
 
@@ -341,7 +342,10 @@ func (a *keystoneAuther) getProjectRolesV3(userId string, tenant keystone.V2_ten
 	resp, err := keystone.GetHttpClient().Do(request)
 	if err != nil {
 		return []string{}, err
-	} else if resp.StatusCode != 201 {
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 201 {
 		return []string{}, errors.New("Keystone project-scoped authentication failed: " + resp.Status)
 	}
 
@@ -379,7 +383,10 @@ func (a *keystoneAuther) getTenantRolesV2(userId string, tenant keystone.V2_tena
 	resp, err := keystone.GetHttpClient().Do(request)
 	if err != nil {
 		return []string{}, err
-	} else if resp.StatusCode != 200 && resp.StatusCode != 203 {
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 && resp.StatusCode != 203 {
 		return []string{}, errors.New("Keystone tenant-scoped authentication failed: " + resp.Status)
 	}
 
@@ -443,7 +450,10 @@ func (a *keystoneAuther) getProjectListV3() error {
 	resp, err := keystone.GetHttpClient().Do(request)
 	if err != nil {
 		return err
-	} else if resp.StatusCode != 200 {
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
 		return errors.New("Keystone project-list failed: " + resp.Status)
 	}
 

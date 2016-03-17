@@ -91,7 +91,7 @@ func authenticateV3(c *middleware.Context) (string, error) {
 	}
 
 	auth_post.Auth.Identity.Password.User.Password = c.Session.Get(middleware.SESS_KEY_PASSWORD).(string)
-	// the user domain name is currently hardcoded via a config setting - this should change to an extra domain field in the login dialog later
+	// the user domain name is currently hardcoded via a config setting. TODO: this should change to using a domain field in the login dialog
 	auth_post.Auth.Identity.Password.User.Domain.Name = setting.KeystoneUserDomainName
 	// set the project domain name to the user domain name, as we only deal with the projects for the domain the user logged in with
 	auth_post.Auth.Scope.Project.Domain = &keystone.V3_domain_struct{Name: setting.KeystoneUserDomainName}
@@ -104,11 +104,12 @@ func authenticateV3(c *middleware.Context) (string, error) {
 	request.Header.Add("Content-Type", "application/json")
 
 	resp, err := keystone.GetHttpClient().Do(request)
-	defer resp.Body.Close()
-
 	if err != nil {
 		return "", err
-	} else if resp.StatusCode != 201 {
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 201 {
 		return "", errors.New("Keystone authentication failed: " + resp.Status)
 	}
 
