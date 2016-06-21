@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/grafana/grafana/pkg/log"
 	"net/http"
 )
 
@@ -88,13 +90,25 @@ type auth_response_struct struct {
 }
 
 type auth_token_struct struct {
-	Roles      []auth_roles_struct `json:"roles"`
-	Expires_at string              `json:"expires_at"`
+	Roles      []auth_roles_struct       `json:"roles"`
+	Expires_at string                    `json:"expires_at"`
+	User       auth_user_response_struct `json:"user"`
 }
 
 type auth_roles_struct struct {
 	Id   string `json:"id"`
 	Name string `json:"name"`
+}
+
+type auth_user_response_struct struct {
+	Name   string                          `json:"name"`
+	Id     string                          `json:"id"`
+	Domain auth_userdomain_response_struct `json:"domain"`
+}
+
+type auth_userdomain_response_struct struct {
+	Name string `json:"name"`
+	Id   string `json:"id"`
 }
 
 // Projects Response
@@ -103,8 +117,9 @@ type project_response_struct struct {
 }
 
 type project_struct struct {
-	Name    string
-	Enabled bool
+	Name     string
+	Enabled  bool
+	DomainId string `json:"domain_id"`
 }
 
 ////////////////////////
@@ -115,6 +130,7 @@ type project_struct struct {
 type Auth_data struct {
 	Server        string
 	Domain        string
+	DomainId      string
 	Username      string
 	Password      string
 	Project       string
@@ -191,14 +207,17 @@ func authenticate(data *Auth_data, b []byte) error {
 	data.Token = resp.Header.Get("X-Subject-Token")
 	data.Expiration = auth_response.Token.Expires_at
 	data.Roles = auth_response.Token.Roles
+	data.DomainId = auth_response.Token.User.Domain.Id
+	data.Username = auth_response.Token.User.Name
 
 	return nil
 }
 
 // Projects Section
 type Projects_data struct {
-	Token  string
-	Server string
+	Token    string
+	Server   string
+	DomainId string
 	//response
 	Projects []string
 }
@@ -232,7 +251,7 @@ func GetProjects(data *Projects_data) error {
 		return err
 	}
 	for _, project := range project_response.Projects {
-		if project.Enabled {
+		if project.Enabled && (project.DomainId == data.DomainId) {
 			data.Projects = append(data.Projects, project.Name)
 		}
 	}

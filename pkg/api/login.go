@@ -4,6 +4,7 @@ import (
 	"net/url"
 
 	"github.com/grafana/grafana/pkg/api/dtos"
+	"github.com/grafana/grafana/pkg/api/keystone"
 	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/log"
 	"github.com/grafana/grafana/pkg/login"
@@ -112,7 +113,21 @@ func LoginPost(c *middleware.Context, cmd dtos.LoginCommand) Response {
 	loginUserWithUser(user, c)
 
 	if setting.KeystoneEnabled {
-		c.Session.Set(middleware.SESS_KEY_PASSWORD, cmd.Password)
+		if setting.KeystoneCredentialAesKey != "" {
+			cmd.Password = keystone.EncryptPassword(cmd.Password)
+		}
+		if setting.KeystoneCookieCredentials {
+			log.Debug("c.Req.Header.Get(\"X-Forwarded-Proto\"): %s", c.Req.Header.Get("X-Forwarded-Proto"))
+			var days interface{}
+			if setting.LogInRememberDays == 0 {
+				days = nil
+			} else {
+				days = 86400 * setting.LogInRememberDays
+			}
+			c.SetCookie(middleware.SESS_KEY_PASSWORD, cmd.Password, days, setting.AppSubUrl+"/", nil, middleware.IsSecure(c), true)
+		} else {
+			c.Session.Set(middleware.SESS_KEY_PASSWORD, cmd.Password)
+		}
 	}
 
 	result := map[string]interface{}{
@@ -136,16 +151,18 @@ func loginUserWithUser(user *m.User, c *middleware.Context) {
 
 	days := 86400 * setting.LogInRememberDays
 	if days > 0 {
-		c.SetCookie(setting.CookieUserName, user.Login, days, setting.AppSubUrl+"/")
-		c.SetSuperSecureCookie(util.EncodeMd5(user.Rands+user.Password), setting.CookieRememberName, user.Login, days, setting.AppSubUrl+"/")
+		c.SetCookie(setting.CookieUserName, user.Login, days, setting.AppSubUrl+"/", nil, middleware.IsSecure(c), true)
+		c.SetSuperSecureCookie(util.EncodeMd5(user.Rands+user.Password),
+			setting.CookieRememberName, user.Login, days, setting.AppSubUrl+"/", nil, middleware.IsSecure(c), true)
 	}
 
 	c.Session.Set(middleware.SESS_KEY_USERID, user.Id)
 }
 
 func Logout(c *middleware.Context) {
-	c.SetCookie(setting.CookieUserName, "", -1, setting.AppSubUrl+"/")
-	c.SetCookie(setting.CookieRememberName, "", -1, setting.AppSubUrl+"/")
+	c.SetCookie(setting.CookieUserName, "", -1, setting.AppSubUrl+"/", nil, middleware.IsSecure(c), true)
+	c.SetCookie(setting.CookieRememberName, "", -1, setting.AppSubUrl+"/", nil, middleware.IsSecure(c), true)
+	c.SetCookie(middleware.SESS_KEY_PASSWORD, "", -1, setting.AppSubUrl+"/", nil, middleware.IsSecure(c), true)
 	c.Session.Destory(c)
 	c.Redirect(setting.AppSubUrl + "/login")
 }

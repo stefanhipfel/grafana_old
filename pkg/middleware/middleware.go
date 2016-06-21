@@ -236,3 +236,7 @@ func (ctx *Context) HasHelpFlag(flag m.HelpFlags1) bool {
 func (ctx *Context) TimeRequest(timer metrics.Timer) {
 	ctx.Data["perfmon.timer"] = timer
 }
+
+func IsSecure(ctx *Context) bool {
+	return (ctx.Req.TLS != nil) || (ctx.Req.Header.Get("X-Forwarded-Proto") == "https")
+}

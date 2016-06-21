@@ -6,11 +6,15 @@ import (
 	"github.com/grafana/grafana/pkg/api/keystone"
 	"github.com/grafana/grafana/pkg/bus"
 	m "github.com/grafana/grafana/pkg/models"
+	"strings"
+  "github.com/grafana/grafana/pkg/log"
 )
 
 type keystoneAuther struct {
 	server      string
 	domainname  string
+	domainId    string
+	defaultrole string
 	roles       map[m.RoleType][]string
 	admin_roles []string
 
@@ -32,7 +36,7 @@ func NewKeystoneAuthenticator(server, domainname string, global_admin_roles, adm
 func (a *keystoneAuther) login(query *LoginUserQuery) error {
 
 	// perform initial authentication
-	if err := a.authenticate(query.Username, query.Password); err != nil {
+	if err := a.authenticate(query); err != nil {
 		return err
 	}
 
@@ -49,17 +53,26 @@ func (a *keystoneAuther) login(query *LoginUserQuery) error {
 
 }
 
-func (a *keystoneAuther) authenticate(username, password string) error {
+func (a *keystoneAuther) authenticate(query *LoginUserQuery) error {
+	user, _ := keystone.UserDomain(query.Username)
 	auth := keystone.Auth_data{
 		Server:   a.server,
-		Username: username,
-		Password: password,
+		Username: user,
+		Password: query.Password,
 		Domain:   a.domainname,
 	}
 	if err := keystone.AuthenticateUnscoped(&auth); err != nil {
 		return err
 	}
 	a.token = auth.Token
+	a.domainId = auth.DomainId
+
+	// Make sure we store the username with the same case as Keystone
+	// in case the actual username is a different case
+	userNameDomain := strings.Split(query.Username, "@")
+	userNameDomain[0] = auth.Username
+	query.Username = strings.Join(userNameDomain, "@")
+
 	return nil
 }
 
@@ -103,10 +116,14 @@ func (a *keystoneAuther) updateGrafanaUserPermissions(userid int64, isAdmin bool
 }
 
 func (a *keystoneAuther) getGrafanaOrgFor(orgname string) (*m.Org, error) {
+
+	log.Debug("getGrafanaOrgFor( %v )", orgname)
+
 	// get org from grafana db
 	orgQuery := m.GetOrgByNameQuery{Name: orgname}
 	if err := bus.Dispatch(&orgQuery); err != nil {
 		if err == m.ErrOrgNotFound {
+			log.Debug("orgname %s not found - create it", orgname)
 			return a.createGrafanaOrg(orgname)
 		} else {
 			return nil, err
@@ -200,6 +217,7 @@ func (a *keystoneAuther) syncOrgRoles(username, password string, user *m.User) e
 	// add missing org roles
 	for project, _ := range a.project_list {
 		if grafanaOrg, err := a.getGrafanaOrgFor(project); err != nil {
+			log.Error(3, "Couldn't find Grafana org %s", project)
 			return err
 		} else {
 			if _, exists := handledOrgIds[grafanaOrg.Id]; exists {
@@ -275,9 +293,11 @@ func (a *keystoneAuther) syncOrgRoles(username, password string, user *m.User) e
 }
 
 func (a *keystoneAuther) getProjectList(username, password string) error {
+	log.Trace("getProjectList() with username %s", username)
 	projects_data := keystone.Projects_data{
-		Token:  a.token,
-		Server: a.server,
+		Token:    a.token,
+		Server:   a.server,
+		DomainId: a.domainId,
 	}
 	if err := keystone.GetProjects(&projects_data); err != nil {
 		return err
@@ -297,12 +317,13 @@ func (a *keystoneAuther) getProjectList(username, password string) error {
 		for _, role := range auth.Roles {
 			roles = append(roles, role.Name)
 		}
-		a.project_list[project] = roles
+		a.project_list[project+"@"+a.domainname] = roles
 	}
 	return nil
 }
 
 func (a *keystoneAuther) getRole(user_roles []string) m.RoleType {
+	log.Trace("getRole(%v)", user_roles)
 	role_map := make(map[string]bool)
 	for _, role := range user_roles {
 		role_map[role] = true
