@@ -139,17 +139,19 @@ var (
 	LdapAllowSignup bool = true
 
 	// Keystone
-	KeystoneEnabled          bool
-	KeystoneURL              string
-	KeystoneDefaultDomain    string
-	KeystoneDefaultRole      string
-	KeystoneViewerRoles      []string
-	KeystoneReadEditorRoles  []string
-	KeystoneEditorRoles      []string
-	KeystoneAdminRoles       []string
-	KeystoneGlobalAdminRoles []string
-	KeystoneVerifySSLCert    bool
-	KeystoneRootCAPEMFile    string
+	KeystoneEnabled           bool
+	KeystoneCookieCredentials bool
+	KeystoneCredentialAesKey  string
+	KeystoneURL               string
+	KeystoneDefaultDomain     string
+	KeystoneDefaultRole       string
+	KeystoneViewerRoles       []string
+	KeystoneReadEditorRoles   []string
+	KeystoneEditorRoles       []string
+	KeystoneAdminRoles        []string
+	KeystoneGlobalAdminRoles  []string
+	KeystoneVerifySSLCert     bool
+	KeystoneRootCAPEMFile     string
 
 	// SMTP email settings
 	Smtp SmtpSettings
@@ -572,6 +574,8 @@ func NewConfigContext(args *CommandLineArgs) error {
 
 	keystone := Cfg.Section("auth.keystone")
 	KeystoneEnabled = keystone.Key("enabled").MustBool(false)
+	KeystoneCookieCredentials = keystone.Key("cookie_credentials").MustBool(false)
+	KeystoneCredentialAesKey = keystone.Key("credential_aes_key").String()
 	KeystoneURL = keystone.Key("auth_url").String()
 	KeystoneDefaultDomain = keystone.Key("default_domain").String()
 	KeystoneDefaultRole = keystone.Key("default_role").String()

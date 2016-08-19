@@ -3,11 +3,17 @@ package keystone
 import (
 	"time"
 
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"github.com/grafana/grafana/pkg/bus"
+	"github.com/grafana/grafana/pkg/log"
 	"github.com/grafana/grafana/pkg/middleware"
 	m "github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/setting"
+	"io"
 )
 
 const (
@@ -19,7 +25,13 @@ const (
 
 func getUserName(c *middleware.Context) (string, error) {
 	var keystoneUserIdObj interface{}
-	if keystoneUserIdObj = c.Session.Get(middleware.SESS_KEY_USERID); keystoneUserIdObj == nil {
+	if setting.KeystoneCookieCredentials {
+		if keystoneUserIdObj = c.GetCookie(setting.CookieUserName); keystoneUserIdObj == nil {
+			return "", errors.New("Couldn't find cookie containing keystone userId")
+		} else {
+			return keystoneUserIdObj.(string), nil
+		}
+	} else if keystoneUserIdObj = c.Session.Get(middleware.SESS_KEY_USERID); keystoneUserIdObj == nil {
 		return "", errors.New("Session timed out trying to get keystone userId")
 	}
 
@@ -53,8 +65,16 @@ func getNewToken(c *middleware.Context) (string, error) {
 	}
 
 	var keystonePasswordObj interface{}
-	if keystonePasswordObj = c.Session.Get(middleware.SESS_KEY_PASSWORD); keystonePasswordObj == nil {
+	if setting.KeystoneCookieCredentials {
+		if keystonePasswordObj = c.GetCookie(middleware.SESS_KEY_PASSWORD); keystonePasswordObj == nil {
+			return "", errors.New("Couldn't find cookie containing keystone password")
+		}
+	} else if keystonePasswordObj = c.Session.Get(middleware.SESS_KEY_PASSWORD); keystonePasswordObj == nil {
 		return "", errors.New("Session timed out trying to get keystone password")
+	}
+
+	if setting.KeystoneCredentialAesKey != "" {
+		keystonePasswordObj = decryptPassword(keystonePasswordObj.(string))
 	}
 
 	auth := Auth_data{
@@ -123,4 +143,35 @@ func GetToken(c *middleware.Context) (string, error) {
 		return "", err
 	}
 	return token, nil
+}
+
+func EncryptPassword(password string) string {
+	key := []byte(setting.KeystoneCredentialAesKey)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		log.Error(3, "Error: NewCipher(%d bytes) = %s", len(setting.KeystoneCredentialAesKey), err)
+	}
+	ciphertext := make([]byte, aes.BlockSize+len(password))
+	iv := ciphertext[:aes.BlockSize]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		log.Error(3, "Error: %s", err)
+	}
+	stream := cipher.NewOFB(block, iv)
+	stream.XORKeyStream(ciphertext[aes.BlockSize:], []byte(password))
+
+	return base64.StdEncoding.EncodeToString(ciphertext)
+}
+
+func decryptPassword(base64ciphertext string) string {
+	key := []byte(setting.KeystoneCredentialAesKey)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		log.Error(3, "Error: NewCipher(%d bytes) = %s", len(setting.KeystoneCredentialAesKey), err)
+	}
+	ciphertext, err := base64.StdEncoding.DecodeString(base64ciphertext)
+	iv := ciphertext[:aes.BlockSize]
+	password := make([]byte, len(ciphertext)-aes.BlockSize)
+	stream := cipher.NewOFB(block, iv)
+	stream.XORKeyStream(password, ciphertext[aes.BlockSize:])
+	return string(password)
 }
