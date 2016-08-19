@@ -232,3 +232,7 @@ func (ctx *Context) HasUserRole(role m.RoleType) bool {
 func (ctx *Context) TimeRequest(timer metrics.Timer) {
 	ctx.Data["perfmon.timer"] = timer
 }
+
+func IsSecure(ctx *Context) bool {
+	return (ctx.Req.TLS != nil) || (ctx.Req.Header.Get("X-Forwarded-Proto") == "https")
+}
