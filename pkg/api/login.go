@@ -4,6 +4,7 @@ import (
 	"net/url"
 
 	"github.com/grafana/grafana/pkg/api/dtos"
+	"github.com/grafana/grafana/pkg/api/keystone"
 	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/log"
 	"github.com/grafana/grafana/pkg/login"
@@ -108,7 +109,14 @@ func LoginPost(c *middleware.Context, cmd dtos.LoginCommand) Response {
 	loginUserWithUser(user, c)
 
 	if setting.KeystoneEnabled {
-		c.Session.Set(middleware.SESS_KEY_PASSWORD, cmd.Password)
+		if setting.KeystoneCredentialAesKey != "" {
+			cmd.Password = keystone.EncryptPassword(cmd.Password)
+		}
+		if setting.KeystoneCookieCredentials {
+			c.SetCookie(middleware.SESS_KEY_PASSWORD, cmd.Password)
+		} else {
+			c.Session.Set(middleware.SESS_KEY_PASSWORD, cmd.Password)
+		}
 	}
 
 	result := map[string]interface{}{
