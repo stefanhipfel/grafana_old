@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"crypto/subtle"
+	"github.com/grafana/grafana/pkg/api/keystone"
 	"github.com/grafana/grafana/pkg/bus"
 	m "github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/setting"
@@ -42,8 +43,12 @@ func AuthenticateUser(query *LoginUserQuery) error {
 	}
 
 	if setting.KeystoneEnabled {
+		user, domain := keystone.UserDomain(query.Username)
+		if domain == setting.KeystoneDefaultDomain {
+			query.Username = user
+		}
 		auther := NewKeystoneAuthenticator(setting.KeystoneURL,
-			setting.KeystoneDefaultDomain,
+			domain,
 			setting.KeystoneDefaultRole,
 			setting.KeystoneGlobalAdminRoles,
 			setting.KeystoneAdminRoles,

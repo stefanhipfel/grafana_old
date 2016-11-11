@@ -14,6 +14,7 @@ import (
 	m "github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/setting"
 	"io"
+	"strings"
 )
 
 const (
@@ -84,19 +85,20 @@ func getNewToken(c *middleware.Context) (string, error) {
 		log.Warn("Password stored in cleartext!")
 	}
 
+	user, domain := UserDomain(username)
+	keystoneProject := strings.Replace(project, "@"+domain, "", 1)
 	auth := Auth_data{
-		Username: username,
-		Project:  project,
+		Username: user,
+		Project:  keystoneProject,
 		Password: keystonePasswordObj.(string),
-		Domain:   setting.KeystoneDefaultDomain,
+		Domain:   domain,
 		Server:   setting.KeystoneURL,
 	}
 	if err := AuthenticateScoped(&auth); err != nil {
-		if setting.KeystoneCookieCredentials {
-			c.SetCookie(middleware.SESS_KEY_PASSWORD, "", -1, setting.AppSubUrl+"/", nil, middleware.IsSecure(c), true)
-		} else {
-			c.Session.Set(middleware.SESS_KEY_PASSWORD, nil)
-		}
+		c.SetCookie(setting.CookieUserName, "", -1, setting.AppSubUrl+"/", nil, middleware.IsSecure(c), true)
+		c.SetCookie(setting.CookieRememberName, "", -1, setting.AppSubUrl+"/", nil, middleware.IsSecure(c), true)
+		c.SetCookie(middleware.SESS_KEY_PASSWORD, "", -1, setting.AppSubUrl+"/", nil, middleware.IsSecure(c), true)
+		c.Session.Destory(c)
 		return "", err
 	}
 
@@ -194,4 +196,14 @@ func decryptPassword(base64ciphertext string) string {
 	stream := cipher.NewOFB(block, iv)
 	stream.XORKeyStream(password, ciphertext[aes.BlockSize:])
 	return string(password)
+}
+
+func UserDomain(username string) (string, string) {
+	user := username
+	domain := setting.KeystoneDefaultDomain
+	if at_idx := strings.IndexRune(username, '@'); at_idx > 0 {
+		domain = username[at_idx+1:]
+		user = username[:at_idx]
+	}
+	return user, domain
 }

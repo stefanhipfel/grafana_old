@@ -56,9 +56,10 @@ func (a *keystoneAuther) login(query *LoginUserQuery) error {
 }
 
 func (a *keystoneAuther) authenticate(username, password string) error {
+	user, _ := keystone.UserDomain(username)
 	auth := keystone.Auth_data{
 		Server:   a.server,
-		Username: username,
+		Username: user,
 		Password: password,
 		Domain:   a.domainname,
 	}
@@ -109,10 +110,14 @@ func (a *keystoneAuther) updateGrafanaUserPermissions(userid int64, isAdmin bool
 }
 
 func (a *keystoneAuther) getGrafanaOrgFor(orgname string) (*m.Org, error) {
+
+	log.Debug("getGrafanaOrgFor( %v )", orgname)
+
 	// get org from grafana db
 	orgQuery := m.GetOrgByNameQuery{Name: orgname}
 	if err := bus.Dispatch(&orgQuery); err != nil {
 		if err == m.ErrOrgNotFound {
+			log.Debug("orgname %s not found - create it", orgname)
 			return a.createGrafanaOrg(orgname)
 		} else {
 			return nil, err
@@ -209,6 +214,7 @@ func (a *keystoneAuther) syncOrgRoles(username, password string, user *m.User) e
 	// add missing org roles
 	for project, _ := range a.project_list {
 		if grafanaOrg, err := a.getGrafanaOrgFor(project); err != nil {
+			log.Error(3, "Couldn't find Grafana org %s", project)
 			return err
 		} else {
 			if _, exists := handledOrgIds[grafanaOrg.Id]; exists {
@@ -284,6 +290,7 @@ func (a *keystoneAuther) syncOrgRoles(username, password string, user *m.User) e
 }
 
 func (a *keystoneAuther) getProjectList(username, password string) error {
+	log.Trace("getProjectList() with username %s", username)
 	projects_data := keystone.Projects_data{
 		Token:  a.token,
 		Server: a.server,
@@ -306,12 +313,13 @@ func (a *keystoneAuther) getProjectList(username, password string) error {
 		for _, role := range auth.Roles {
 			roles = append(roles, role.Name)
 		}
-		a.project_list[project] = roles
+		a.project_list[project+"@"+a.domainname] = roles
 	}
 	return nil
 }
 
 func (a *keystoneAuther) getRole(user_roles []string) m.RoleType {
+	log.Trace("getRole(%v)", user_roles)
 	role_map := make(map[string]bool)
 	for _, role := range user_roles {
 		role_map[role] = true
