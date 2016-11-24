@@ -37,7 +37,7 @@ func (a *keystoneAuther) login(query *LoginUserQuery) error {
 
 	log.Trace("perform initial authentication")
 	// perform initial authentication
-	if err := a.authenticate(query.Username, query.Password); err != nil {
+	if err := a.authenticate(query); err != nil {
 		return err
 	}
 
@@ -56,12 +56,12 @@ func (a *keystoneAuther) login(query *LoginUserQuery) error {
 
 }
 
-func (a *keystoneAuther) authenticate(username, password string) error {
-	user, _ := keystone.UserDomain(username)
+func (a *keystoneAuther) authenticate(query *LoginUserQuery) error {
+	user, _ := keystone.UserDomain(query.Username)
 	auth := keystone.Auth_data{
 		Server:   a.server,
 		Username: user,
-		Password: password,
+		Password: query.Password,
 		Domain:   a.domainname,
 	}
 	if err := keystone.AuthenticateUnscoped(&auth); err != nil {
@@ -69,6 +69,7 @@ func (a *keystoneAuther) authenticate(username, password string) error {
 	}
 	a.token = auth.Token
 	a.domainId = auth.DomainId
+	query.Username = auth.Username // in case the actual username is a different case
 	return nil
 }
 

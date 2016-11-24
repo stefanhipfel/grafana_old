@@ -221,6 +221,7 @@ func authenticate(data *Auth_data, b []byte) error {
 	data.Expiration = auth_response.Token.Expires_at
 	data.Roles = auth_response.Token.Roles
 	data.DomainId = auth_response.Token.User.Domain.Id
+	data.Username = auth_response.Token.User.Name
 
 	return nil
 }
