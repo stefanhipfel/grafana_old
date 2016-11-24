@@ -13,6 +13,7 @@ import (
 type keystoneAuther struct {
 	server      string
 	domainname  string
+	domainId    string
 	defaultrole string
 	roles       map[m.RoleType][]string
 	admin_roles []string
@@ -67,6 +68,7 @@ func (a *keystoneAuther) authenticate(username, password string) error {
 		return err
 	}
 	a.token = auth.Token
+	a.domainId = auth.DomainId
 	return nil
 }
 
@@ -292,8 +294,9 @@ func (a *keystoneAuther) syncOrgRoles(username, password string, user *m.User) e
 func (a *keystoneAuther) getProjectList(username, password string) error {
 	log.Trace("getProjectList() with username %s", username)
 	projects_data := keystone.Projects_data{
-		Token:  a.token,
-		Server: a.server,
+		Token:    a.token,
+		Server:   a.server,
+		DomainId: a.domainId,
 	}
 	if err := keystone.GetProjects(&projects_data); err != nil {
 		return err
