@@ -8,6 +8,7 @@ import (
 	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/log"
 	m "github.com/grafana/grafana/pkg/models"
+	"strings"
 )
 
 type keystoneAuther struct {
@@ -69,7 +70,13 @@ func (a *keystoneAuther) authenticate(query *LoginUserQuery) error {
 	}
 	a.token = auth.Token
 	a.domainId = auth.DomainId
-	query.Username = auth.Username // in case the actual username is a different case
+
+	// Make sure we store the username with the same case as Keystone
+	// in case the actual username is a different case
+	userNameDomain := strings.Split(query.Username, "@")
+	userNameDomain[0] = auth.Username
+	query.Username = strings.Join(userNameDomain, "@")
+
 	return nil
 }
 

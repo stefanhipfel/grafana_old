@@ -86,6 +86,7 @@ func getNewToken(c *middleware.Context) (string, error) {
 	}
 
 	user, domain := UserDomain(username)
+	// Remove @domain from project name
 	keystoneProject := strings.Replace(project, "@"+domain, "", 1)
 	auth := Auth_data{
 		Username: user,
