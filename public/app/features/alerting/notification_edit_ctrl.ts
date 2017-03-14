@@ -8,7 +8,7 @@ import config from 'app/core/config';
 export class AlertNotificationEditCtrl {
   model: any;
   theForm: any;
-  testSeverity: string = "critical";
+  testSeverity: any = "critical";
 
   /** @ngInject */
   constructor(private $routeParams, private backendSrv, private $scope, private $location) {

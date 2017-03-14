@@ -7,8 +7,8 @@ export class CloudWatchConfigCtrl {
   static templateUrl = 'partials/config.html';
   current: any;
 
-  accessKeyExist: boolean = false;
-  secretKeyExist: boolean = false;
+  accessKeyExist: any = false;
+  secretKeyExist: any = false;
 
   /** @ngInject */
   constructor($scope) {

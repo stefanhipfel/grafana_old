@@ -9,7 +9,7 @@ export class ProfileCtrl {
   old_theme: any;
   orgs: any = [];
   userForm: any;
-  showOrgsList: boolean = false;
+  showOrgsList: any = false;
 
   /** @ngInject **/
   constructor(private backendSrv, private contextSrv, private $location) {
